@@ -27,7 +27,7 @@ public:
 void render(RenderState& state) {
   auto& done = state.done;
   const auto is_shown = ImGui::Begin("Hello, world!");
-  const auto _window_cleanup = boni::cleanup<ImGui::End>();
+  const boni::cleanup<ImGui::End> _window_cleanup{};
   if (is_shown) {
     const auto is_button_pressed = ImGui::Button("Goodbye, world!");
     if (is_button_pressed) {
@@ -41,7 +41,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
     SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM, "%s", SDL_GetError());
     return 1;
   }
-  const auto _sdl2_cleanup = boni::cleanup<SDL_Quit>();
+  const boni::cleanup<SDL_Quit> _sdl2_cleanup{};
 
   constexpr auto window_width = 1280;
   constexpr auto window_height = 720;
@@ -71,10 +71,9 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   ImGuiIO& io = ImGui::GetIO();
 
   ImGui_ImplSDL2_InitForSDLRenderer(window);
-  const auto platform_cleanup = boni::cleanup<ImGui_ImplSDL2_Shutdown>();
+  const boni::cleanup<ImGui_ImplSDL2_Shutdown> _platform_cleanup{};
   ImGui_ImplSDLRenderer_Init(renderer);
-  const auto renderer_cleanup =
-      boni::cleanup<ImGui_ImplSDLRenderer_Shutdown>();
+  const boni::cleanup<ImGui_ImplSDLRenderer_Shutdown> _renderer_cleanup{};
 
   auto render_state = RenderState{};
 

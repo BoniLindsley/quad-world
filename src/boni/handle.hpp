@@ -42,7 +42,12 @@ public:
 
 template <void (*DeleteFunction)()> class cleanup {
 public:
+  cleanup() = default;
   ~cleanup() { DeleteFunction(); }
+  cleanup(const cleanup&) = delete;
+  auto operator=(const cleanup&) -> cleanup& = delete;
+  cleanup(cleanup&&) = delete;
+  auto operator=(cleanup&&) -> cleanup& = delete;
 };
 
 } // end namespace boni
