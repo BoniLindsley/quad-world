@@ -10,28 +10,46 @@
 #include <SDL.h>
 
 // Standard libraries.
+#include <array>
 #include <stdexcept>
 #include <string>
+#include <utility>
+#include <vector>
 
 // C Standard libraries.
 #include <cstdint>
 #include <cstdio>
 
-const auto default_clear_colour = ImVec4{0.45F, 0.55F, 0.60F, 1.00F};
+using Point = std::array<int, 2>;
 
 class RenderState {
 public:
   bool done = false;
+  std::vector<Point> points;
 };
 
 void render(RenderState& state) {
-  auto& done = state.done;
-  const auto is_shown = ImGui::Begin("Hello, world!");
+  const auto is_shown = ImGui::Begin("Points");
   const boni::cleanup<ImGui::End> _window_cleanup{};
   if (is_shown) {
-    const auto is_button_pressed = ImGui::Button("Goodbye, world!");
-    if (is_button_pressed) {
-      done = true;
+    constexpr auto dimension = std::tuple_size<Point>::value;
+    const auto is_shown = ImGui::BeginTable("PointTable", dimension);
+    if (is_shown) {
+      const boni::cleanup<ImGui::EndTable> _table_cleanup{};
+      auto& points = state.points;
+      for (auto row = 0; row < points.size(); ++row) {
+        ImGui::TableNextRow();
+        ImGui::TableNextColumn();
+        ImGui::PushID(row);
+        const boni::cleanup<ImGui::PopID> _id_cleanup{};
+        ImGui::InputInt2("", points[row].data());
+      }
+      ImGui::TableNextRow();
+      ImGui::TableNextColumn();
+      const auto is_clicked = ImGui::Button("+##AddRow");
+      if (is_clicked) {
+        points.push_back({0, 0});
+      }
     }
   }
 }
@@ -76,7 +94,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   const boni::cleanup<ImGui_ImplSDLRenderer_Shutdown> _renderer_cleanup{};
 
   auto render_state = RenderState{};
-
+  
   auto& done = render_state.done;
   while (!done) {
     SDL_Event event;
