@@ -91,10 +91,11 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   ImGui_ImplSDL2_InitForSDLRenderer(window);
   const boni::cleanup<ImGui_ImplSDL2_Shutdown> _platform_cleanup{};
   ImGui_ImplSDLRenderer_Init(renderer);
-  const boni::cleanup<ImGui_ImplSDLRenderer_Shutdown> _renderer_cleanup{};
+  const boni::cleanup<ImGui_ImplSDLRenderer_Shutdown>
+      _renderer_cleanup{};
 
   auto render_state = RenderState{};
-  
+
   auto& done = render_state.done;
   while (!done) {
     SDL_Event event;
