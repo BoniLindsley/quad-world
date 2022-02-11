@@ -24,7 +24,7 @@ public:
   bool done = false;
 };
 
-void render(RenderState& state, boni::SDL2::renderer& renderer) {
+void render(RenderState& state) {
   auto& done = state.done;
   const auto is_shown = ImGui::Begin("Hello, world!");
   const auto _window_cleanup = boni::cleanup<ImGui::End>();
@@ -34,7 +34,6 @@ void render(RenderState& state, boni::SDL2::renderer& renderer) {
       done = true;
     }
   }
-  SDL_RenderClear(renderer);
 }
 
 auto main(int /*argc*/, char** /*argv*/) -> int {
@@ -110,8 +109,9 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
     ImGui_ImplSDLRenderer_NewFrame();
     ImGui::NewFrame();
 
-    render(render_state, renderer);
+    render(render_state);
 
+    SDL_RenderClear(renderer);
     ImGui::Render();
     ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
     SDL_RenderPresent(renderer);
