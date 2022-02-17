@@ -103,8 +103,10 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
       SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM, "%s", SDL_GetError());
       return 1;
     }
+    bool redraw_needed = false;
     do {
       const auto is_event_used = ImGui_ImplSDL2_ProcessEvent(&event);
+      redraw_needed |= is_event_used;
       if (is_event_used) {
         continue;
       }
@@ -119,7 +121,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
         }
       }
     } while (SDL_PollEvent(&event) != 0);
-    if (done) {
+    if (done || !redraw_needed) {
       continue;
     }
 
