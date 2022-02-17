@@ -10,7 +10,10 @@
 #include <SDL.h>
 
 // Standard libraries.
+#include <algorithm>
 #include <array>
+#include <iterator>
+#include <limits>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -20,29 +23,34 @@
 #include <cstdint>
 #include <cstdio>
 
-using Point = std::array<int, 2>;
-
 class RenderState {
 public:
   bool done = false;
-  std::vector<Point> points;
+  std::vector<SDL_Point> points;
+  std::vector<SDL_Point> draw_positions;
 };
 
-void render(RenderState& state) {
+void process_gui(RenderState& state) noexcept {
   const auto is_shown = ImGui::Begin("Points");
   const boni::cleanup<ImGui::End> _window_cleanup{};
   if (is_shown) {
-    constexpr auto dimension = std::tuple_size<Point>::value;
+    constexpr auto dimension = 2;
     const auto is_shown = ImGui::BeginTable("PointTable", dimension);
     if (is_shown) {
       const boni::cleanup<ImGui::EndTable> _table_cleanup{};
       auto& points = state.points;
       for (auto row = 0; row < points.size(); ++row) {
         ImGui::TableNextRow();
-        ImGui::TableNextColumn();
         ImGui::PushID(row);
         const boni::cleanup<ImGui::PopID> _id_cleanup{};
-        ImGui::InputInt2("", points[row].data());
+        {
+          ImGui::TableNextColumn();
+          ImGui::InputInt("##x", static_cast<int*>(&points[row].x));
+        }
+        {
+          ImGui::TableNextColumn();
+          ImGui::InputInt("##y", static_cast<int*>(&points[row].y));
+        }
       }
       ImGui::TableNextRow();
       ImGui::TableNextColumn();
@@ -52,6 +60,54 @@ void render(RenderState& state) {
       }
     }
   }
+}
+
+int render(boni::SDL2::renderer& renderer, RenderState& state) noexcept {
+  if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0) != 0) {
+    return -1;
+  }
+  if (SDL_RenderClear(renderer) != 0) {
+    return -1;
+  }
+
+  const auto& points = state.points;
+  const auto point_count = points.size();
+  if (point_count > 0) {
+    auto renderer_output_size = SDL_Point{0, 0};
+    if (SDL_GetRendererOutputSize(
+            renderer, &renderer_output_size.x,
+            &renderer_output_size.y) != 0) {
+      return -1;
+    }
+    const auto offset = SDL_Point{
+        renderer_output_size.x / 2, renderer_output_size.y / 2};
+
+    auto& draw_positions = state.draw_positions;
+    draw_positions.clear();
+    std::transform(
+        points.cbegin(), points.cend(),
+        std::back_inserter(draw_positions),
+        [offset](SDL_Point point) -> SDL_Point {
+          return {point.x + offset.x, point.y + offset.y};
+        });
+    const auto draw_count = draw_positions.size();
+    if (draw_count > std::numeric_limits<int>::max()) {
+      return SDL_SetError("Too many points to draw.");
+    }
+    const auto unsigned_draw_count = static_cast<int>(draw_count);
+
+    constexpr auto max_value = std::numeric_limits<std::uint8_t>::max();
+    if (SDL_SetRenderDrawColor(
+            renderer, max_value, max_value, max_value, max_value) != 0) {
+      return -1;
+    }
+    if (SDL_RenderDrawPoints(
+            renderer, draw_positions.data(), unsigned_draw_count) != 0) {
+      return -1;
+    }
+  }
+
+  return 0;
 }
 
 auto main(int /*argc*/, char** /*argv*/) -> int {
@@ -129,9 +185,12 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
     ImGui_ImplSDLRenderer_NewFrame();
     ImGui::NewFrame();
 
-    render(render_state);
+    process_gui(render_state);
+    if (render(renderer, render_state) != 0) {
+      SDL_LogCritical(SDL_LOG_CATEGORY_RENDER, "%s", SDL_GetError());
+      render_state.done = true;
+    }
 
-    SDL_RenderClear(renderer);
     ImGui::Render();
     ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
     SDL_RenderPresent(renderer);
