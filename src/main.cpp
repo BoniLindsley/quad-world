@@ -88,7 +88,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   }
   ImGuiIO& io = ImGui::GetIO();
 
-  ImGui_ImplSDL2_InitForSDLRenderer(window);
+  ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
   const boni::cleanup<ImGui_ImplSDL2_Shutdown> _platform_cleanup{};
   ImGui_ImplSDLRenderer_Init(renderer);
   const boni::cleanup<ImGui_ImplSDLRenderer_Shutdown>
