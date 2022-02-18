@@ -25,9 +25,9 @@
 
 class RenderState {
 public:
-  bool done = false;
   std::vector<SDL_Point> points;
   std::vector<SDL_Point> draw_positions;
+  SDL_Point draw_offset{0, 0};
 };
 
 void process_gui(RenderState& state) noexcept {
@@ -73,22 +73,14 @@ int render(boni::SDL2::renderer& renderer, RenderState& state) noexcept {
   const auto& points = state.points;
   const auto point_count = points.size();
   if (point_count > 0) {
-    auto renderer_output_size = SDL_Point{0, 0};
-    if (SDL_GetRendererOutputSize(
-            renderer, &renderer_output_size.x,
-            &renderer_output_size.y) != 0) {
-      return -1;
-    }
-    const auto offset = SDL_Point{
-        renderer_output_size.x / 2, renderer_output_size.y / 2};
-
+    const auto& draw_offset = state.draw_offset;
     auto& draw_positions = state.draw_positions;
     draw_positions.clear();
     std::transform(
         points.cbegin(), points.cend(),
         std::back_inserter(draw_positions),
-        [offset](SDL_Point point) -> SDL_Point {
-          return {point.x + offset.x, point.y + offset.y};
+        [draw_offset](SDL_Point point) -> SDL_Point {
+          return {point.x + draw_offset.x, point.y + draw_offset.y};
         });
     const auto draw_count = draw_positions.size();
     if (draw_count > std::numeric_limits<int>::max()) {
@@ -151,49 +143,70 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
       _renderer_cleanup{};
 
   auto render_state = RenderState{};
+  {
+    auto renderer_output_size = SDL_Point{0, 0};
+    if (SDL_GetRendererOutputSize(
+            renderer, &renderer_output_size.x,
+            &renderer_output_size.y) != 0) {
+      return -1;
+    }
+    render_state.draw_offset = SDL_Point{
+        renderer_output_size.x / 2, renderer_output_size.y / 2};
+  }
 
-  auto& done = render_state.done;
-  while (!done) {
+  while (true) {
     SDL_Event event;
     if (SDL_WaitEvent(&event) == 0) {
       SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM, "%s", SDL_GetError());
       return 1;
     }
-    bool redraw_needed = false;
+    auto redraw_needed = false;
     do {
-      const auto is_event_used = ImGui_ImplSDL2_ProcessEvent(&event);
-      redraw_needed |= is_event_used;
-      if (is_event_used) {
-        continue;
-      }
-      if (event.type == SDL_QUIT) {
-        done = true;
-      }
-      if (event.type == SDL_WINDOWEVENT) {
+      auto is_event_processed = false;
+      switch (event.type) {
+      case SDL_MOUSEBUTTONDOWN:
+        if (!io.WantCaptureMouse) {
+          auto& button_event = event.button;
+          const auto draw_offset = render_state.draw_offset;
+          render_state.points.push_back(
+              {button_event.x - draw_offset.x,
+               button_event.y - draw_offset.y});
+          is_event_processed = true;
+          redraw_needed = true;
+        }
+        break;
+      case SDL_QUIT:
+        return 0;
+      case SDL_WINDOWEVENT: {
         auto& window_event = event.window;
         if (window_event.event == SDL_WINDOWEVENT_CLOSE &&
             window_event.windowID == SDL_GetWindowID(window)) {
-          done = true;
+          return 0;
         }
+      } break;
+      default:
+        break;
+      }
+      if (!is_event_processed) {
+        redraw_needed |= ImGui_ImplSDL2_ProcessEvent(&event);
       }
     } while (SDL_PollEvent(&event) != 0);
-    if (done || !redraw_needed) {
-      continue;
+
+    if (redraw_needed) {
+      ImGui_ImplSDL2_NewFrame();
+      ImGui_ImplSDLRenderer_NewFrame();
+      ImGui::NewFrame();
+
+      process_gui(render_state);
+      if (render(renderer, render_state) != 0) {
+        SDL_LogCritical(SDL_LOG_CATEGORY_RENDER, "%s", SDL_GetError());
+        return 1;
+      }
+
+      ImGui::Render();
+      ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
+      SDL_RenderPresent(renderer);
     }
-
-    ImGui_ImplSDL2_NewFrame();
-    ImGui_ImplSDLRenderer_NewFrame();
-    ImGui::NewFrame();
-
-    process_gui(render_state);
-    if (render(renderer, render_state) != 0) {
-      SDL_LogCritical(SDL_LOG_CATEGORY_RENDER, "%s", SDL_GetError());
-      render_state.done = true;
-    }
-
-    ImGui::Render();
-    ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
-    SDL_RenderPresent(renderer);
   }
 
   return 0;
