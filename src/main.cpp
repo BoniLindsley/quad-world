@@ -20,6 +20,7 @@
 #include <vector>
 
 // C Standard libraries.
+#include <cmath>
 #include <cstdint>
 #include <cstdio>
 
@@ -28,6 +29,7 @@ public:
   std::vector<SDL_Point> points;
   std::vector<SDL_Point> draw_positions;
   SDL_Point draw_offset{0, 0};
+  float draw_scale{1.f};
 };
 
 void process_gui(RenderState& state) noexcept {
@@ -93,8 +95,15 @@ int render(boni::SDL2::renderer& renderer, RenderState& state) noexcept {
             renderer, max_value, max_value, max_value, max_value) != 0) {
       return -1;
     }
+    const auto draw_scale = state.draw_scale;
+    if (SDL_RenderSetScale(renderer, draw_scale, draw_scale) != 0) {
+      return -1;
+    }
     if (SDL_RenderDrawPoints(
             renderer, draw_positions.data(), unsigned_draw_count) != 0) {
+      return -1;
+    }
+    if (SDL_RenderSetScale(renderer, 1, 1) != 0) {
       return -1;
     }
   }
@@ -166,11 +175,33 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
       switch (event.type) {
       case SDL_MOUSEBUTTONDOWN:
         if (!io.WantCaptureMouse) {
-          auto& button_event = event.button;
+          const auto& button_event = event.button;
           const auto draw_offset = render_state.draw_offset;
+          const auto draw_scale = render_state.draw_scale;
+          const auto point_x_float =
+              button_event.x / draw_scale - draw_offset.x;
+          const auto point_y_float =
+              button_event.y / draw_scale - draw_offset.y;
+          if (point_x_float > std::numeric_limits<int>::max() ||
+              point_x_float < std::numeric_limits<int>::lowest() ||
+              point_y_float > std::numeric_limits<int>::max() ||
+              point_y_float < std::numeric_limits<int>::lowest()) {
+            SDL_LogCritical(
+                SDL_LOG_CATEGORY_INPUT, "Input position out of bound.");
+            return 1;
+          }
           render_state.points.push_back(
-              {button_event.x - draw_offset.x,
-               button_event.y - draw_offset.y});
+              {static_cast<int>(point_x_float),
+               static_cast<int>(point_y_float)});
+          is_event_processed = true;
+          redraw_needed = true;
+        }
+        break;
+      case SDL_MOUSEWHEEL:
+        if (!io.WantCaptureMouse) {
+          auto& wheel_event = event.wheel;
+          auto scale_ratio = std::pow(0.9f, wheel_event.y);
+          render_state.draw_scale *= static_cast<float>(scale_ratio);
           is_event_processed = true;
           redraw_needed = true;
         }
