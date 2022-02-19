@@ -30,6 +30,9 @@ public:
   std::vector<SDL_Point> draw_positions;
   SDL_Point draw_offset{0, 0};
   float draw_scale{1.f};
+  bool is_right_dragging{false};
+  SDL_Point last_right_press_position{0, 0};
+  SDL_Point last_right_press_draw_offset{0, 0};
 };
 
 void process_gui(RenderState& state) noexcept {
@@ -176,23 +179,66 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
       case SDL_MOUSEBUTTONDOWN:
         if (!io.WantCaptureMouse) {
           const auto& button_event = event.button;
-          const auto draw_offset = render_state.draw_offset;
-          const auto draw_scale = render_state.draw_scale;
-          const auto point_x_float =
-              button_event.x / draw_scale - draw_offset.x;
-          const auto point_y_float =
-              button_event.y / draw_scale - draw_offset.y;
-          if (point_x_float > std::numeric_limits<int>::max() ||
-              point_x_float < std::numeric_limits<int>::lowest() ||
-              point_y_float > std::numeric_limits<int>::max() ||
-              point_y_float < std::numeric_limits<int>::lowest()) {
-            SDL_LogCritical(
-                SDL_LOG_CATEGORY_INPUT, "Input position out of bound.");
-            return 1;
+          switch (button_event.button) {
+          case SDL_BUTTON_LEFT: {
+            const auto draw_offset = render_state.draw_offset;
+            const auto draw_scale = render_state.draw_scale;
+            const auto point_x_float =
+                button_event.x / draw_scale - draw_offset.x;
+            const auto point_y_float =
+                button_event.y / draw_scale - draw_offset.y;
+            if (point_x_float > std::numeric_limits<int>::max() ||
+                point_x_float < std::numeric_limits<int>::lowest() ||
+                point_y_float > std::numeric_limits<int>::max() ||
+                point_y_float < std::numeric_limits<int>::lowest()) {
+              SDL_LogCritical(
+                  SDL_LOG_CATEGORY_INPUT,
+                  "Input position out of bound.");
+              return 1;
+            }
+            render_state.points.push_back(
+                {static_cast<int>(point_x_float),
+                 static_cast<int>(point_y_float)});
+            is_event_processed = true;
+            redraw_needed = true;
+          } break;
+          case SDL_BUTTON_RIGHT:
+            render_state.last_right_press_position = {
+                button_event.x, button_event.y};
+            render_state.last_right_press_draw_offset = render_state.draw_offset;
+            render_state.is_right_dragging = true;
+            is_event_processed = true;
+          default:
+            break;
           }
-          render_state.points.push_back(
-              {static_cast<int>(point_x_float),
-               static_cast<int>(point_y_float)});
+        }
+        break;
+      case SDL_MOUSEBUTTONUP: {
+        const auto& button_event = event.button;
+        auto& is_right_dragging = render_state.is_right_dragging;
+        if (is_right_dragging &&
+            button_event.button == SDL_BUTTON_RIGHT) {
+          is_right_dragging = false;
+          is_event_processed = true;
+        }
+      } break;
+      case SDL_MOUSEMOTION:
+        if (render_state.is_right_dragging) {
+          const auto& motion_event = event.motion;
+          const auto& last_right_press_draw_offset =
+              render_state.last_right_press_draw_offset;
+          const auto& last_right_press_position =
+              render_state.last_right_press_position;
+          const auto relative_mouse_position = SDL_Point{
+              motion_event.x - last_right_press_position.x,
+              motion_event.y - last_right_press_position.y};
+          const auto draw_scale = render_state.draw_scale;
+          render_state.draw_offset = {
+              last_right_press_draw_offset.x +
+                  static_cast<int>(relative_mouse_position.x / draw_scale),
+              last_right_press_draw_offset.y +
+                  static_cast<int>(relative_mouse_position.y / draw_scale),
+          };
           is_event_processed = true;
           redraw_needed = true;
         }
