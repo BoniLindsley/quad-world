@@ -3,6 +3,8 @@ project("quad-world" VERSION "0.1.0")
 
 add_executable("${PROJECT_NAME}" "src/main.cpp")
 
+find_package(Boost REQUIRED)
+
 find_package(OpenGL REQUIRED)
 target_link_libraries("${PROJECT_NAME}" PRIVATE OpenGL::GL)
 

@@ -3,6 +3,8 @@
 #include "boni/SDL2.hpp"
 
 // External dependencies.
+#include <boost/numeric/conversion/cast.hpp>
+
 #include <imgui.h>
 #include <imgui_impl_sdl.h>
 #include <imgui_impl_sdlrenderer.h>
@@ -87,11 +89,6 @@ int render(boni::SDL2::renderer& renderer, RenderState& state) noexcept {
         [draw_offset](SDL_Point point) -> SDL_Point {
           return {point.x + draw_offset.x, point.y + draw_offset.y};
         });
-    const auto draw_count = draw_positions.size();
-    if (draw_count > std::numeric_limits<int>::max()) {
-      return SDL_SetError("Too many points to draw.");
-    }
-    const auto unsigned_draw_count = static_cast<int>(draw_count);
 
     constexpr auto max_value = std::numeric_limits<std::uint8_t>::max();
     if (SDL_SetRenderDrawColor(
@@ -103,7 +100,8 @@ int render(boni::SDL2::renderer& renderer, RenderState& state) noexcept {
       return -1;
     }
     if (SDL_RenderDrawPoints(
-            renderer, draw_positions.data(), unsigned_draw_count) != 0) {
+            renderer, draw_positions.data(),
+            boost::numeric_cast<int>(draw_positions.size())) != 0) {
       return -1;
     }
     if (SDL_RenderSetScale(renderer, 1, 1) != 0) {
@@ -183,22 +181,11 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
           case SDL_BUTTON_LEFT: {
             const auto draw_offset = render_state.draw_offset;
             const auto draw_scale = render_state.draw_scale;
-            const auto point_x_float =
-                button_event.x / draw_scale - draw_offset.x;
-            const auto point_y_float =
-                button_event.y / draw_scale - draw_offset.y;
-            if (point_x_float > std::numeric_limits<int>::max() ||
-                point_x_float < std::numeric_limits<int>::lowest() ||
-                point_y_float > std::numeric_limits<int>::max() ||
-                point_y_float < std::numeric_limits<int>::lowest()) {
-              SDL_LogCritical(
-                  SDL_LOG_CATEGORY_INPUT,
-                  "Input position out of bound.");
-              return 1;
-            }
-            render_state.points.push_back(
-                {static_cast<int>(point_x_float),
-                 static_cast<int>(point_y_float)});
+            const auto point_x = boost::numeric_cast<int>(
+                button_event.x / draw_scale - draw_offset.x);
+            const auto point_y = boost::numeric_cast<int>(
+                button_event.y / draw_scale - draw_offset.y);
+            render_state.points.push_back({point_x, point_y});
             is_event_processed = true;
             redraw_needed = true;
           } break;
