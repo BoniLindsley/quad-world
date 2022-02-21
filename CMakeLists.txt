@@ -2,6 +2,10 @@ cmake_minimum_required(VERSION "3.0.0")
 project("quad-world" VERSION "0.1.0")
 
 add_executable("${PROJECT_NAME}" "src/main.cpp")
+set_target_properties("${PROJECT_NAME}" PROPERTIES
+  CXX_STANDARD 17
+  CXX_EXTENSIONS OFF
+)
 
 find_package(Boost REQUIRED)
 

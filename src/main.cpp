@@ -37,7 +37,7 @@ public:
   SDL_Point last_right_press_draw_offset{0, 0};
 };
 
-void process_gui(RenderState& state) noexcept {
+void process_gui(RenderState& state) {
   const auto is_shown = ImGui::Begin("Points");
   const boni::cleanup<ImGui::End> _window_cleanup{};
   if (is_shown) {
@@ -69,7 +69,7 @@ void process_gui(RenderState& state) noexcept {
   }
 }
 
-int render(boni::SDL2::renderer& renderer, RenderState& state) noexcept {
+auto render(boni::SDL2::renderer& renderer, RenderState& state) -> int {
   if (SDL_SetRenderDrawColor(renderer, 0, 0, 0, 0) != 0) {
     return -1;
   }
@@ -179,12 +179,16 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
           const auto& button_event = event.button;
           switch (button_event.button) {
           case SDL_BUTTON_LEFT: {
+            const auto button_x = static_cast<float>(button_event.x);
+            const auto button_y = static_cast<float>(button_event.y);
             const auto draw_offset = render_state.draw_offset;
             const auto draw_scale = render_state.draw_scale;
-            const auto point_x = boost::numeric_cast<int>(
-                button_event.x / draw_scale - draw_offset.x);
-            const auto point_y = boost::numeric_cast<int>(
-                button_event.y / draw_scale - draw_offset.y);
+            const auto point_x =
+                boost::numeric_cast<int>(button_x / draw_scale) -
+                draw_offset.x;
+            const auto point_y =
+                boost::numeric_cast<int>(button_y / draw_scale) -
+                draw_offset.y;
             render_state.points.push_back({point_x, point_y});
             is_event_processed = true;
             redraw_needed = true;
@@ -192,9 +196,11 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
           case SDL_BUTTON_RIGHT:
             render_state.last_right_press_position = {
                 button_event.x, button_event.y};
-            render_state.last_right_press_draw_offset = render_state.draw_offset;
+            render_state.last_right_press_draw_offset =
+                render_state.draw_offset;
             render_state.is_right_dragging = true;
             is_event_processed = true;
+            break;
           default:
             break;
           }
@@ -212,19 +218,24 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
       case SDL_MOUSEMOTION:
         if (render_state.is_right_dragging) {
           const auto& motion_event = event.motion;
-          const auto& last_right_press_draw_offset =
-              render_state.last_right_press_draw_offset;
           const auto& last_right_press_position =
               render_state.last_right_press_position;
-          const auto relative_mouse_position = SDL_Point{
-              motion_event.x - last_right_press_position.x,
-              motion_event.y - last_right_press_position.y};
           const auto draw_scale = render_state.draw_scale;
+          const auto movemnt_x =
+              static_cast<float>(
+                  motion_event.x - last_right_press_position.x) /
+              draw_scale;
+          const auto movemnt_y =
+              static_cast<float>(
+                  motion_event.y - last_right_press_position.y) /
+              draw_scale;
+          const auto& last_right_press_draw_offset =
+              render_state.last_right_press_draw_offset;
           render_state.draw_offset = {
               last_right_press_draw_offset.x +
-                  static_cast<int>(relative_mouse_position.x / draw_scale),
+                  static_cast<int>(movemnt_x),
               last_right_press_draw_offset.y +
-                  static_cast<int>(relative_mouse_position.y / draw_scale),
+                  static_cast<int>(movemnt_y),
           };
           is_event_processed = true;
           redraw_needed = true;
