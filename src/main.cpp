@@ -27,6 +27,8 @@
 #include <cstdint>
 #include <cstdio>
 
+constexpr auto ZOOM_PER_LEVEL{0.9f};
+
 struct Drag {
   SDL_Point start_mouse_position{0, 0};
   SDL_Point start_position{0, 0};
@@ -34,13 +36,17 @@ struct Drag {
 
 struct Camera {
   SDL_Point position;
-  float zoom{1.f};
+  int zoom_level{};
   std::optional<Drag> drag;
 };
 
+auto get_zoom(const Camera& camera) {
+  return std::pow(ZOOM_PER_LEVEL, camera.zoom_level);
+}
+
 auto viewport_to_world(
     const Camera& camera, const SDL_Point viewport_point) -> SDL_Point {
-  const auto zoom = camera.zoom;
+  const auto zoom = get_zoom(camera);
   const auto world_point_relative_to_camera_x =
       static_cast<float>(viewport_point.x) / zoom;
   const auto world_point_relative_to_camera_y =
@@ -60,7 +66,7 @@ auto world_to_viewport(const Camera& camera, const SDL_Point world_point)
       static_cast<float>(world_point.x - camera_position.x);
   const auto world_point_relative_to_camera_y =
       static_cast<float>(world_point.y - camera_position.y);
-  const auto zoom = camera.zoom;
+  const auto zoom = get_zoom(camera);
   return {
       boost::numeric_cast<int>(world_point_relative_to_camera_x * zoom),
       boost::numeric_cast<int>(world_point_relative_to_camera_y * zoom)
@@ -244,8 +250,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
       case SDL_MOUSEWHEEL:
         if (!io.WantCaptureMouse) {
           auto& wheel_event = event.wheel;
-          auto scale_ratio = std::pow(0.9f, wheel_event.y);
-          render_state.camera.zoom *= static_cast<float>(scale_ratio);
+          render_state.camera.zoom_level += wheel_event.y;
           is_event_processed = true;
           redraw_needed = true;
         }
