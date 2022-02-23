@@ -29,13 +29,15 @@
 
 constexpr auto ZOOM_PER_LEVEL{0.9f};
 
+using Position = std::array<int, 2>;
+
 struct Drag {
-  SDL_Point start_mouse_position{0, 0};
-  SDL_Point start_position{0, 0};
+  SDL_Point start_mouse_point{0, 0};
+  Position start_position{0, 0};
 };
 
 struct Camera {
-  SDL_Point position;
+  Position position;
   int zoom_level{};
   std::optional<Drag> drag;
 };
@@ -45,7 +47,7 @@ auto get_zoom(const Camera& camera) {
 }
 
 auto viewport_to_world(
-    const Camera& camera, const SDL_Point viewport_point) -> SDL_Point {
+    const Camera& camera, const SDL_Point viewport_point) -> Position {
   const auto zoom = get_zoom(camera);
   const auto world_point_relative_to_camera_x =
       static_cast<float>(viewport_point.x) / zoom;
@@ -54,18 +56,18 @@ auto viewport_to_world(
   const auto camera_position = camera.position;
   return {
       boost::numeric_cast<int>(world_point_relative_to_camera_x) +
-          camera_position.x,
+          camera_position[0],
       boost::numeric_cast<int>(world_point_relative_to_camera_y) +
-          camera_position.y};
+          camera_position[1]};
 }
 
-auto world_to_viewport(const Camera& camera, const SDL_Point world_point)
+auto world_to_viewport(const Camera& camera, const Position world_point)
     -> SDL_Point {
   const auto camera_position = camera.position;
   const auto world_point_relative_to_camera_x =
-      static_cast<float>(world_point.x - camera_position.x);
+      static_cast<float>(world_point[0] - camera_position[0]);
   const auto world_point_relative_to_camera_y =
-      static_cast<float>(world_point.y - camera_position.y);
+      static_cast<float>(world_point[1] - camera_position[1]);
   const auto zoom = get_zoom(camera);
   return {
       boost::numeric_cast<int>(world_point_relative_to_camera_x * zoom),
@@ -75,38 +77,45 @@ auto world_to_viewport(const Camera& camera, const SDL_Point world_point)
 }
 
 struct RenderState {
-  std::vector<SDL_Point> points;
-  std::vector<SDL_Point> draw_positions;
+  std::vector<Position> positions;
+  std::vector<SDL_Point> draw_points;
   Camera camera;
 };
 
+void refresh_positions_render_cache(RenderState& state) {
+  const auto& positions = state.positions;
+  const auto& camera = state.camera;
+  auto& draw_positions = state.draw_points;
+  draw_positions.clear();
+  std::transform(
+      positions.cbegin(), positions.cend(),
+      std::back_inserter(draw_positions),
+      [&camera](Position point) -> SDL_Point {
+        return world_to_viewport(camera, point);
+      });
+}
+
 void process_gui(RenderState& state) {
-  const auto is_shown = ImGui::Begin("Points");
+  const auto is_shown = ImGui::Begin("Positions");
   const boni::cleanup<ImGui::End> _window_cleanup{};
   if (is_shown) {
     constexpr auto dimension = 2;
-    const auto is_shown = ImGui::BeginTable("PointTable", dimension);
+    const auto is_shown = ImGui::BeginTable("PositionTable", dimension);
     if (is_shown) {
       const boni::cleanup<ImGui::EndTable> _table_cleanup{};
-      auto& points = state.points;
-      for (auto row = 0; row < points.size(); ++row) {
+      auto& positions = state.positions;
+      for (auto row = 0; row < positions.size(); ++row) {
         ImGui::TableNextRow();
         ImGui::PushID(row);
         const boni::cleanup<ImGui::PopID> _id_cleanup{};
-        {
-          ImGui::TableNextColumn();
-          ImGui::InputInt("##x", static_cast<int*>(&points[row].x));
-        }
-        {
-          ImGui::TableNextColumn();
-          ImGui::InputInt("##y", static_cast<int*>(&points[row].y));
-        }
+        ImGui::TableNextColumn();
+        ImGui::InputInt2("", positions[row].data());
       }
       ImGui::TableNextRow();
       ImGui::TableNextColumn();
       const auto is_clicked = ImGui::Button("+##AddRow");
       if (is_clicked) {
-        points.push_back({0, 0});
+        positions.push_back({0, 0});
       }
     }
   }
@@ -119,28 +128,17 @@ auto render(boni::SDL2::renderer& renderer, RenderState& state) -> int {
   if (SDL_RenderClear(renderer) != 0) {
     return -1;
   }
-
-  const auto& points = state.points;
-  const auto point_count = points.size();
-  if (point_count > 0) {
-    const auto& camera = state.camera;
-    auto& draw_positions = state.draw_positions;
-    draw_positions.clear();
-    std::transform(
-        points.cbegin(), points.cend(),
-        std::back_inserter(draw_positions),
-        [&camera](SDL_Point point) -> SDL_Point {
-          return world_to_viewport(camera, point);
-        });
-
+  refresh_positions_render_cache(state);
+  auto& draw_points = state.draw_points;
+  auto draw_count = boost::numeric_cast<int>(draw_points.size());
+  if (draw_count > 0) {
     constexpr auto max_value = std::numeric_limits<std::uint8_t>::max();
     if (SDL_SetRenderDrawColor(
             renderer, max_value, max_value, max_value, max_value) != 0) {
       return -1;
     }
-    if (SDL_RenderDrawPoints(
-            renderer, draw_positions.data(),
-            boost::numeric_cast<int>(draw_positions.size())) != 0) {
+    if (SDL_RenderDrawPoints(renderer, draw_points.data(), draw_count) !=
+        0) {
       return -1;
     }
   }
@@ -206,7 +204,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
           case SDL_BUTTON_LEFT: {
             const auto new_point = viewport_to_world(
                 render_state.camera, {button_event.x, button_event.y});
-            render_state.points.push_back(new_point);
+            render_state.positions.push_back(new_point);
             is_event_processed = true;
             redraw_needed = true;
           } break;
@@ -237,10 +235,10 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
           auto& drag = camera.drag.value();
           camera.position = drag.start_position;
           const auto& motion_event = event.motion;
-          const auto start_mouse_position = drag.start_mouse_position;
+          const auto start_mouse_point = drag.start_mouse_point;
           const auto drag_displacement = SDL_Point{
-              motion_event.x - start_mouse_position.x,
-              motion_event.y - start_mouse_position.y};
+              motion_event.x - start_mouse_point.x,
+              motion_event.y - start_mouse_point.y};
           camera.position = viewport_to_world(
               camera, {-drag_displacement.x, -drag_displacement.y});
           is_event_processed = true;
