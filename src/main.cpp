@@ -16,6 +16,7 @@
 #include <array>
 #include <iterator>
 #include <limits>
+#include <optional>
 #include <stdexcept>
 #include <string>
 #include <utility>
@@ -26,15 +27,21 @@
 #include <cstdint>
 #include <cstdio>
 
-class RenderState {
-public:
+struct Drag {
+  SDL_Point start_mouse_position{0, 0};
+  SDL_Point start_position{0, 0};
+};
+
+struct Camera {
+  SDL_Point position;
+  float zoom{1.f};
+  std::optional<Drag> drag;
+};
+
+struct RenderState {
   std::vector<SDL_Point> points;
   std::vector<SDL_Point> draw_positions;
-  SDL_Point draw_offset{0, 0};
-  float draw_scale{1.f};
-  bool is_right_dragging{false};
-  SDL_Point last_right_press_position{0, 0};
-  SDL_Point last_right_press_draw_offset{0, 0};
+  Camera camera;
 };
 
 void process_gui(RenderState& state) {
@@ -80,14 +87,16 @@ auto render(boni::SDL2::renderer& renderer, RenderState& state) -> int {
   const auto& points = state.points;
   const auto point_count = points.size();
   if (point_count > 0) {
-    const auto& draw_offset = state.draw_offset;
+    const auto& camera = state.camera;
+    const auto camera_position = camera.position;
     auto& draw_positions = state.draw_positions;
     draw_positions.clear();
     std::transform(
         points.cbegin(), points.cend(),
         std::back_inserter(draw_positions),
-        [draw_offset](SDL_Point point) -> SDL_Point {
-          return {point.x + draw_offset.x, point.y + draw_offset.y};
+        [camera_position](SDL_Point point) -> SDL_Point {
+          return {
+              point.x + camera_position.x, point.y + camera_position.y};
         });
 
     constexpr auto max_value = std::numeric_limits<std::uint8_t>::max();
@@ -95,8 +104,8 @@ auto render(boni::SDL2::renderer& renderer, RenderState& state) -> int {
             renderer, max_value, max_value, max_value, max_value) != 0) {
       return -1;
     }
-    const auto draw_scale = state.draw_scale;
-    if (SDL_RenderSetScale(renderer, draw_scale, draw_scale) != 0) {
+    const auto zoom = camera.zoom;
+    if (SDL_RenderSetScale(renderer, zoom, zoom) != 0) {
       return -1;
     }
     if (SDL_RenderDrawPoints(
@@ -160,7 +169,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
             &renderer_output_size.y) != 0) {
       return -1;
     }
-    render_state.draw_offset = SDL_Point{
+    render_state.camera.position = SDL_Point{
         renderer_output_size.x / 2, renderer_output_size.y / 2};
   }
 
@@ -181,71 +190,69 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
           case SDL_BUTTON_LEFT: {
             const auto button_x = static_cast<float>(button_event.x);
             const auto button_y = static_cast<float>(button_event.y);
-            const auto draw_offset = render_state.draw_offset;
-            const auto draw_scale = render_state.draw_scale;
+            const auto& camera = render_state.camera;
+            const auto camera_position = camera.position;
+            const auto zoom = camera.zoom;
             const auto point_x =
-                boost::numeric_cast<int>(button_x / draw_scale) -
-                draw_offset.x;
+                boost::numeric_cast<int>(button_x / zoom) -
+                camera_position.x;
             const auto point_y =
-                boost::numeric_cast<int>(button_y / draw_scale) -
-                draw_offset.y;
+                boost::numeric_cast<int>(button_y / zoom) -
+                camera_position.y;
             render_state.points.push_back({point_x, point_y});
             is_event_processed = true;
             redraw_needed = true;
           } break;
-          case SDL_BUTTON_RIGHT:
-            render_state.last_right_press_position = {
-                button_event.x, button_event.y};
-            render_state.last_right_press_draw_offset =
-                render_state.draw_offset;
-            render_state.is_right_dragging = true;
+          case SDL_BUTTON_RIGHT: {
+            auto& camera = render_state.camera;
+            camera.drag.emplace(
+                Drag{{button_event.x, button_event.y}, camera.position});
             is_event_processed = true;
-            break;
+          } break;
           default:
             break;
           }
         }
         break;
       case SDL_MOUSEBUTTONUP: {
+        auto& drag = render_state.camera.drag;
         const auto& button_event = event.button;
-        auto& is_right_dragging = render_state.is_right_dragging;
-        if (is_right_dragging &&
+        if (drag.has_value() &&
             button_event.button == SDL_BUTTON_RIGHT) {
-          is_right_dragging = false;
+          drag.reset();
           is_event_processed = true;
         }
       } break;
-      case SDL_MOUSEMOTION:
-        if (render_state.is_right_dragging) {
+      case SDL_MOUSEMOTION: {
+        auto& camera = render_state.camera;
+        auto& drag_maybe = camera.drag;
+        if (drag_maybe.has_value()) {
+          auto& drag = camera.drag.value();
           const auto& motion_event = event.motion;
-          const auto& last_right_press_position =
-              render_state.last_right_press_position;
-          const auto draw_scale = render_state.draw_scale;
+          const auto& start_mouse_position = drag.start_mouse_position;
+          const auto& zoom = camera.zoom;
           const auto movemnt_x =
               static_cast<float>(
-                  motion_event.x - last_right_press_position.x) /
-              draw_scale;
+                  motion_event.x - start_mouse_position.x) /
+              zoom;
           const auto movemnt_y =
               static_cast<float>(
-                  motion_event.y - last_right_press_position.y) /
-              draw_scale;
-          const auto& last_right_press_draw_offset =
-              render_state.last_right_press_draw_offset;
-          render_state.draw_offset = {
-              last_right_press_draw_offset.x +
-                  static_cast<int>(movemnt_x),
-              last_right_press_draw_offset.y +
-                  static_cast<int>(movemnt_y),
+                  motion_event.y - start_mouse_position.y) /
+              zoom;
+          const auto& start_position = drag.start_position;
+          camera.position = {
+              start_position.x + static_cast<int>(movemnt_x),
+              start_position.y + static_cast<int>(movemnt_y),
           };
           is_event_processed = true;
           redraw_needed = true;
         }
-        break;
+      } break;
       case SDL_MOUSEWHEEL:
         if (!io.WantCaptureMouse) {
           auto& wheel_event = event.wheel;
           auto scale_ratio = std::pow(0.9f, wheel_event.y);
-          render_state.draw_scale *= static_cast<float>(scale_ratio);
+          render_state.camera.zoom *= static_cast<float>(scale_ratio);
           is_event_processed = true;
           redraw_needed = true;
         }
