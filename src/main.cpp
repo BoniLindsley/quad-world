@@ -38,6 +38,36 @@ struct Camera {
   std::optional<Drag> drag;
 };
 
+auto viewport_to_world(
+    const Camera& camera, const SDL_Point viewport_point) -> SDL_Point {
+  const auto zoom = camera.zoom;
+  const auto world_point_relative_to_camera_x =
+      static_cast<float>(viewport_point.x) / zoom;
+  const auto world_point_relative_to_camera_y =
+      static_cast<float>(viewport_point.y) / zoom;
+  const auto camera_position = camera.position;
+  return {
+      boost::numeric_cast<int>(world_point_relative_to_camera_x) +
+          camera_position.x,
+      boost::numeric_cast<int>(world_point_relative_to_camera_y) +
+          camera_position.y};
+}
+
+auto world_to_viewport(const Camera& camera, const SDL_Point world_point)
+    -> SDL_Point {
+  const auto camera_position = camera.position;
+  const auto world_point_relative_to_camera_x =
+      static_cast<float>(world_point.x - camera_position.x);
+  const auto world_point_relative_to_camera_y =
+      static_cast<float>(world_point.y - camera_position.y);
+  const auto zoom = camera.zoom;
+  return {
+      boost::numeric_cast<int>(world_point_relative_to_camera_x * zoom),
+      boost::numeric_cast<int>(world_point_relative_to_camera_y * zoom)
+
+  };
+}
+
 struct RenderState {
   std::vector<SDL_Point> points;
   std::vector<SDL_Point> draw_positions;
@@ -88,15 +118,13 @@ auto render(boni::SDL2::renderer& renderer, RenderState& state) -> int {
   const auto point_count = points.size();
   if (point_count > 0) {
     const auto& camera = state.camera;
-    const auto camera_position = camera.position;
     auto& draw_positions = state.draw_positions;
     draw_positions.clear();
     std::transform(
         points.cbegin(), points.cend(),
         std::back_inserter(draw_positions),
-        [camera_position](SDL_Point point) -> SDL_Point {
-          return {
-              point.x + camera_position.x, point.y + camera_position.y};
+        [&camera](SDL_Point point) -> SDL_Point {
+          return world_to_viewport(camera, point);
         });
 
     constexpr auto max_value = std::numeric_limits<std::uint8_t>::max();
@@ -104,16 +132,9 @@ auto render(boni::SDL2::renderer& renderer, RenderState& state) -> int {
             renderer, max_value, max_value, max_value, max_value) != 0) {
       return -1;
     }
-    const auto zoom = camera.zoom;
-    if (SDL_RenderSetScale(renderer, zoom, zoom) != 0) {
-      return -1;
-    }
     if (SDL_RenderDrawPoints(
             renderer, draw_positions.data(),
             boost::numeric_cast<int>(draw_positions.size())) != 0) {
-      return -1;
-    }
-    if (SDL_RenderSetScale(renderer, 1, 1) != 0) {
       return -1;
     }
   }
@@ -162,17 +183,6 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
       _renderer_cleanup{};
 
   auto render_state = RenderState{};
-  {
-    auto renderer_output_size = SDL_Point{0, 0};
-    if (SDL_GetRendererOutputSize(
-            renderer, &renderer_output_size.x,
-            &renderer_output_size.y) != 0) {
-      return -1;
-    }
-    render_state.camera.position = SDL_Point{
-        renderer_output_size.x / 2, renderer_output_size.y / 2};
-  }
-
   while (true) {
     SDL_Event event;
     if (SDL_WaitEvent(&event) == 0) {
@@ -188,18 +198,9 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
           const auto& button_event = event.button;
           switch (button_event.button) {
           case SDL_BUTTON_LEFT: {
-            const auto button_x = static_cast<float>(button_event.x);
-            const auto button_y = static_cast<float>(button_event.y);
-            const auto& camera = render_state.camera;
-            const auto camera_position = camera.position;
-            const auto zoom = camera.zoom;
-            const auto point_x =
-                boost::numeric_cast<int>(button_x / zoom) -
-                camera_position.x;
-            const auto point_y =
-                boost::numeric_cast<int>(button_y / zoom) -
-                camera_position.y;
-            render_state.points.push_back({point_x, point_y});
+            const auto new_point = viewport_to_world(
+                render_state.camera, {button_event.x, button_event.y});
+            render_state.points.push_back(new_point);
             is_event_processed = true;
             redraw_needed = true;
           } break;
@@ -228,22 +229,14 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
         auto& drag_maybe = camera.drag;
         if (drag_maybe.has_value()) {
           auto& drag = camera.drag.value();
+          camera.position = drag.start_position;
           const auto& motion_event = event.motion;
-          const auto& start_mouse_position = drag.start_mouse_position;
-          const auto& zoom = camera.zoom;
-          const auto movemnt_x =
-              static_cast<float>(
-                  motion_event.x - start_mouse_position.x) /
-              zoom;
-          const auto movemnt_y =
-              static_cast<float>(
-                  motion_event.y - start_mouse_position.y) /
-              zoom;
-          const auto& start_position = drag.start_position;
-          camera.position = {
-              start_position.x + static_cast<int>(movemnt_x),
-              start_position.y + static_cast<int>(movemnt_y),
-          };
+          const auto start_mouse_position = drag.start_mouse_position;
+          const auto drag_displacement = SDL_Point{
+              motion_event.x - start_mouse_position.x,
+              motion_event.y - start_mouse_position.y};
+          camera.position = viewport_to_world(
+              camera, {-drag_displacement.x, -drag_displacement.y});
           is_event_processed = true;
           redraw_needed = true;
         }
