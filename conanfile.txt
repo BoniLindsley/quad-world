@@ -1,0 +1,7 @@
+[requires]
+imgui/1.90.4
+# sdl/2.28.5
+
+[generators]
+CMakeDeps
+CMakeToolchain

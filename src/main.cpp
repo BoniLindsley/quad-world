@@ -6,8 +6,8 @@
 #include <boost/numeric/conversion/cast.hpp>
 
 #include <imgui.h>
-#include <imgui_impl_sdl.h>
-#include <imgui_impl_sdlrenderer.h>
+#include <imgui_impl_sdl2.h>
+#include <imgui_impl_sdlrenderer2.h>
 
 #include <SDL.h>
 
@@ -182,8 +182,8 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
 
   ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
   const boni::cleanup<ImGui_ImplSDL2_Shutdown> _platform_cleanup{};
-  ImGui_ImplSDLRenderer_Init(renderer);
-  const boni::cleanup<ImGui_ImplSDLRenderer_Shutdown>
+  ImGui_ImplSDLRenderer2_Init(renderer);
+  const boni::cleanup<ImGui_ImplSDLRenderer2_Shutdown>
       _renderer_cleanup{};
 
   auto render_state = RenderState{};
@@ -272,7 +272,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
 
     if (redraw_needed) {
       ImGui_ImplSDL2_NewFrame();
-      ImGui_ImplSDLRenderer_NewFrame();
+      ImGui_ImplSDLRenderer2_NewFrame();
       ImGui::NewFrame();
 
       process_gui(render_state);
@@ -282,7 +282,7 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
       }
 
       ImGui::Render();
-      ImGui_ImplSDLRenderer_RenderDrawData(ImGui::GetDrawData());
+      ImGui_ImplSDLRenderer2_RenderDrawData(ImGui::GetDrawData());
       SDL_RenderPresent(renderer);
     }
   }
