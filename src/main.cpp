@@ -97,17 +97,26 @@ void refresh_positions_render_cache(RenderState& state) {
 
 void process_gui(RenderState& state) {
   const auto is_shown = ImGui::Begin("Positions");
-  const boni::cleanup<ImGui::End> _window_cleanup{};
+  struct WindowCleanup {
+    ~WindowCleanup() { ImGui::End(); }
+  } _window_cleanup;
+  // const boni::cleanup<ImGui::End> _window_cleanup{};
   if (is_shown) {
     constexpr auto dimension = 2;
     const auto is_shown = ImGui::BeginTable("PositionTable", dimension);
     if (is_shown) {
-      const boni::cleanup<ImGui::EndTable> _table_cleanup{};
+      struct TableCleanup {
+        ~TableCleanup() { ImGui::EndTable(); }
+      } _table_cleanup;
+      // const boni::cleanup<ImGui::EndTable> _table_cleanup{};
       auto& positions = state.positions;
       for (auto row = 0; row < positions.size(); ++row) {
         ImGui::TableNextRow();
         ImGui::PushID(row);
-        const boni::cleanup<ImGui::PopID> _id_cleanup{};
+        struct IdCleanup {
+          ~IdCleanup() { ImGui::PopID(); }
+        } _id_cleanup;
+        // const boni::cleanup<ImGui::PopID> _id_cleanup{};
         ImGui::TableNextColumn();
         ImGui::InputInt2("", positions[row].data());
       }
@@ -151,7 +160,10 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
     SDL_LogCritical(SDL_LOG_CATEGORY_SYSTEM, "%s", SDL_GetError());
     return 1;
   }
-  const boni::cleanup<SDL_Quit> _sdl2_cleanup{};
+  struct Sdl2Cleanup {
+    ~Sdl2Cleanup() { SDL_Quit(); }
+  } _sdl2_cleanup;
+  // const boni::cleanup<SDL_Quit> _sdl2_cleanup{};
 
   constexpr auto window_width = 1280;
   constexpr auto window_height = 720;
@@ -181,10 +193,18 @@ auto main(int /*argc*/, char** /*argv*/) -> int {
   ImGuiIO& io = ImGui::GetIO();
 
   ImGui_ImplSDL2_InitForSDLRenderer(window, renderer);
-  const boni::cleanup<ImGui_ImplSDL2_Shutdown> _platform_cleanup{};
+
+  struct PlatformCleanup {
+    ~PlatformCleanup() { ImGui_ImplSDL2_Shutdown(); }
+  } _platform_cleanup;
+  // const boni::cleanup<ImGui_ImplSDL2_Shutdown> _platform_cleanup{};
   ImGui_ImplSDLRenderer2_Init(renderer);
-  const boni::cleanup<ImGui_ImplSDLRenderer2_Shutdown>
-      _renderer_cleanup{};
+
+  struct RendererCleanup {
+    ~RendererCleanup() { ImGui_ImplSDLRenderer2_Shutdown(); }
+  } _renderer_cleanup;
+  // const boni::cleanup<ImGui_ImplSDLRenderer2_Shutdown>
+  //     _renderer_cleanup{};
 
   auto render_state = RenderState{};
   while (true) {

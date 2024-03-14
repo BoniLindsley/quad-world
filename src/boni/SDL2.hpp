@@ -1,15 +1,17 @@
 #pragma once
 
 // Internal headers.
-#include "handle.hpp"
+#include "./memory.hpp"
 
 // External dependencies.
 #include <SDL.h>
 
-namespace boni {
-namespace SDL2 {
-using gl_context = boni::handle<SDL_GLContext, SDL_GL_DeleteContext>;
-using renderer = boni::handle<SDL_Renderer*, SDL_DestroyRenderer>;
-using window = boni::handle<SDL_Window*, SDL_DestroyWindow>;
-} // namespace SDL2
-} // namespace boni
+namespace boni::SDL2 {
+
+using gl_context =
+    memory::handle<SDL_GLContext, void, SDL_GL_DeleteContext>;
+using renderer =
+    memory::handle<SDL_Renderer*, void, SDL_DestroyRenderer>;
+using window = memory::handle<SDL_Window*, void, SDL_DestroyWindow>;
+
+} // namespace boni::SDL2

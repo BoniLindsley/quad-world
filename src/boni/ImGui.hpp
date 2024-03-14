@@ -1,13 +1,14 @@
 #pragma once
 
 // Internal headers.
-#include "handle.hpp"
+#include "./memory.hpp"
 
 // External dependencies.
 #include <imgui.h>
 
-namespace boni {
-namespace ImGui {
-using context = boni::handle<ImGuiContext*, ::ImGui::DestroyContext>;
-} // namespace ImGui
-} // namespace boni
+namespace boni::ImGui {
+
+using context =
+    boni::memory::handle<ImGuiContext*, void, ::ImGui::DestroyContext>;
+
+} // namespace boni::ImGui
